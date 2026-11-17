@@ -1,0 +1,41 @@
+# Build outputs
+**/bin/
+**/obj/
+**/TestResults/
+**/coverage/
+**/coverage.*
+.vs/
+**/.vs/
+
+# User-specific IDE files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local configuration; only the sanitized example is tracked
+**/appsettings*.json
+!**/appsettings.Example.json
+**/appsettings.*.local.json
+**/secrets*.json
+**/secrets*.xml
+**/secrets*.yml
+**/secrets*.yaml
+**/*.secrets.json
+**/credentials*/
+**/token*.json
+**/.env
+**/.env.*
+!**/.env.example
+
+# Temporary and machine-specific files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+Thumbs.db
+.DS_Store
+
+# Unconfirmed personal schema reference
+/databaseA.sql

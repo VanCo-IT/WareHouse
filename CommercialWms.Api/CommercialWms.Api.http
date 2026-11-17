@@ -1,0 +1,16 @@
+@CommercialWms.Api_HostAddress = http://localhost:5206
+
+GET {{CommercialWms.Api_HostAddress}}/api/categories
+Accept: application/json
+
+###
+
+GET {{CommercialWms.Api_HostAddress}}/api/brands
+Accept: application/json
+
+###
+
+GET {{CommercialWms.Api_HostAddress}}/api/products
+Accept: application/json
+
+###
