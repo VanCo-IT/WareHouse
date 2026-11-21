@@ -1,3 +1,4 @@
+using CommercialWms.Api.Contracts.Common;
 using CommercialWms.Api.Contracts.Products;
 using CommercialWms.Api.Data;
 using CommercialWms.Api.Entities;
@@ -13,15 +14,38 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
 {
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProductResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ProductResponse>>> GetProducts(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<ProductResponse>>> GetProducts(
+        [FromQuery] CatalogListQuery query,
+        CancellationToken cancellationToken)
     {
-        var products = await dbContext.Products
-            .AsNoTracking()
+        var products = dbContext.Products.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            products = products.Where(product =>
+                product.SKU.Contains(search)
+                || product.ProductName.Contains(search)
+                || (product.Barcode != null && product.Barcode.Contains(search)));
+        }
+
+        if (query.IsActive.HasValue)
+        {
+            products = products.Where(product => product.IsActive == query.IsActive.Value);
+        }
+
+        var totalCount = await products.CountAsync(cancellationToken);
+        var result = await products
             .OrderBy(product => product.ProductId)
-            .Select(product => ToResponse(product))
+            .ApplyCatalogPaging(query, totalCount, Response.Headers)
+            .Select(product => ToResponse(
+                product,
+                dbContext.ProductUnits
+                    .Where(link => link.ProductId == product.ProductId && link.IsBaseUnit)
+                    .Select(link => (int?)link.UnitId)
+                    .SingleOrDefault()))
             .ToListAsync(cancellationToken);
 
-        return Ok(products);
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]
@@ -32,7 +56,12 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
         var product = await dbContext.Products
             .AsNoTracking()
             .Where(product => product.ProductId == id)
-            .Select(product => ToResponse(product))
+            .Select(product => ToResponse(
+                product,
+                dbContext.ProductUnits
+                    .Where(link => link.ProductId == product.ProductId && link.IsBaseUnit)
+                    .Select(link => (int?)link.UnitId)
+                    .SingleOrDefault()))
             .SingleOrDefaultAsync(cancellationToken);
 
         return product is null ? NotFound() : Ok(product);
@@ -52,7 +81,9 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
         var referenceError = await ValidateReferencesAsync(
             request.CategoryId,
             request.BrandId,
+            request.UnitId,
             requireActiveBrand: true,
+            requireActiveUnit: true,
             cancellationToken);
         if (referenceError is not null)
         {
@@ -83,9 +114,19 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
         };
 
         dbContext.Products.Add(product);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.ProductUnits.Add(new ProductUnit
+            {
+                ProductId = product.ProductId,
+                UnitId = request.UnitId,
+                ConversionToBase = 1,
+                IsBaseUnit = true
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException exception) when (IsProductUniqueConstraintViolation(exception, "IX_Products_SKU"))
         {
@@ -95,8 +136,14 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
         {
             return BarcodeConflict();
         }
+        catch (DbUpdateException exception) when (IsForeignKeyViolation(exception))
+        {
+            return BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "The specified category, brand, or unit does not exist."));
+        }
 
-        var response = ToResponse(product);
+        var response = ToResponse(product, request.UnitId);
         return CreatedAtAction(nameof(GetProduct), new { id = product.ProductId }, response);
     }
 
@@ -122,7 +169,9 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
         var referenceError = await ValidateReferencesAsync(
             request.CategoryId,
             request.BrandId,
+            request.UnitId,
             requireActiveBrand: false,
+            requireActiveUnit: false,
             cancellationToken);
         if (referenceError is not null)
         {
@@ -142,6 +191,24 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
                 cancellationToken))
         {
             return BarcodeConflict();
+        }
+
+        var currentUnitId = await dbContext.ProductUnits
+            .Where(link => link.ProductId == id && link.IsBaseUnit)
+            .Select(link => (int?)link.UnitId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!currentUnitId.HasValue)
+        {
+            return Conflict(CreateProblem(
+                StatusCodes.Status409Conflict,
+                "The product does not have a base unit. Repair its unit association before updating it."));
+        }
+
+        if (currentUnitId.Value != request.UnitId)
+        {
+            return BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "The base unit cannot be changed without defining conversion values for existing product units."));
         }
 
         product.SKU = sku;
@@ -166,7 +233,7 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
             return BarcodeConflict();
         }
 
-        return Ok(ToResponse(product));
+        return Ok(ToResponse(product, currentUnitId));
     }
 
     [HttpDelete("{id:int}")]
@@ -203,7 +270,9 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
     private async Task<string?> ValidateReferencesAsync(
         int categoryId,
         int? brandId,
+        int unitId,
         bool requireActiveBrand,
+        bool requireActiveUnit,
         CancellationToken cancellationToken)
     {
         if (!await dbContext.ProductCategories.AnyAsync(category => category.CategoryId == categoryId, cancellationToken))
@@ -229,6 +298,20 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
             }
         }
 
+        var unitIsActive = await dbContext.Units
+            .Where(unit => unit.UnitId == unitId)
+            .Select(unit => (bool?)unit.IsActive)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!unitIsActive.HasValue)
+        {
+            return $"Unit {unitId} was not found.";
+        }
+
+        if (requireActiveUnit && !unitIsActive.Value)
+        {
+            return $"Unit {unitId} is inactive and cannot be assigned to a product.";
+        }
+
         return null;
     }
 
@@ -248,13 +331,14 @@ public sealed class ProductsController(CommercialWmsDbContext dbContext) : Contr
             || await dbContext.SupplierProducts.AnyAsync(item => item.ProductId == id, cancellationToken);
     }
 
-    private static ProductResponse ToResponse(Product product)
+    private static ProductResponse ToResponse(Product product, int? unitId)
     {
         return new ProductResponse(
             product.ProductId,
             product.SKU,
             product.ProductName,
             product.CategoryId,
+            unitId,
             product.BrandId,
             product.Barcode,
             product.Description,

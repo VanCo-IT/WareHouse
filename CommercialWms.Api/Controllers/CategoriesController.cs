@@ -1,3 +1,4 @@
+using CommercialWms.Api.Contracts.Common;
 using CommercialWms.Api.Contracts.Categories;
 using CommercialWms.Api.Data;
 using CommercialWms.Api.Entities;
@@ -13,15 +14,31 @@ public sealed class CategoriesController(CommercialWmsDbContext dbContext) : Con
 {
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<CategoryResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<CategoryResponse>>> GetCategories(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<CategoryResponse>>> GetCategories(
+        [FromQuery] CatalogListQuery query,
+        CancellationToken cancellationToken)
     {
-        var categories = await dbContext.ProductCategories
-            .AsNoTracking()
+        var categories = dbContext.ProductCategories.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            categories = categories.Where(category =>
+                category.CategoryCode.Contains(search) || category.CategoryName.Contains(search));
+        }
+
+        if (query.IsActive.HasValue)
+        {
+            categories = categories.Where(category => category.IsActive == query.IsActive.Value);
+        }
+
+        var totalCount = await categories.CountAsync(cancellationToken);
+        var result = await categories
             .OrderBy(category => category.CategoryId)
+            .ApplyCatalogPaging(query, totalCount, Response.Headers)
             .Select(category => ToResponse(category))
             .ToListAsync(cancellationToken);
 
-        return Ok(categories);
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]

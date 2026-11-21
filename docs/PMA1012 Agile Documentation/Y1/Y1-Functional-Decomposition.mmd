@@ -1,0 +1,54 @@
+flowchart TD
+    WMS["Commercial WMS"]
+
+    WMS --> CAT["1. Danh mục sản phẩm"]
+    WMS --> SUP["2. Nhà cung cấp và nhà sản xuất"]
+    WMS --> WH["3. Kho và vị trí"]
+    WMS --> PUR["4. Mua hàng và nhập kho"]
+    WMS --> QC["5. Kiểm tra chất lượng"]
+    WMS --> INV["6. Tồn kho và lô hàng"]
+    WMS --> MOV["7. Điều chuyển và điều chỉnh"]
+    WMS --> OUT["8. Bán hàng và xuất kho"]
+    WMS --> CUS["9. Khách hàng và nhân viên"]
+    WMS --> REP["10. Báo cáo, kiểm kê và hệ thống"]
+
+    CAT --> CAT1["Categories - API + UI"]
+    CAT --> CAT2["Brands - API + UI"]
+    CAT --> CAT3["Products - API + UI"]
+    CAT --> CAT4["Units, storage requirements, warehouse policies - schema only"]
+
+    SUP --> SUP1["Suppliers - API + UI"]
+    SUP --> SUP2["Supplier contacts and supplier-product links - API + UI"]
+    SUP --> SUP3["Manufacturers and documents - schema only"]
+
+    WH --> WH1["Warehouses, zones, aisles, racks, shelves, bins - schema only"]
+    WH --> WH2["Warehouse employees and temperature logs - schema only"]
+
+    PUR --> PUR1["Purchase orders and price history - schema only"]
+    PUR --> PUR2["Goods receipts and details - schema only"]
+    QC --> QC1["Quality inspections and details - schema only"]
+
+    INV --> INV1["Lots, balances, transactions, reservations - schema only"]
+    MOV --> MOV1["Stock transfers and details - schema only"]
+    MOV --> MOV2["Stock adjustments and details - schema only"]
+
+    OUT --> OUT1["Sales orders and details - schema only"]
+    OUT --> OUT2["Deliveries, returns and payments - schema only"]
+    CUS --> CUS1["Customers, addresses, customer types - schema only"]
+    CUS --> CUS2["Employees - schema only"]
+
+    REP --> REP1["Catalog count dashboard - API + UI"]
+    REP --> REP2["Operational reports - not implemented"]
+    REP --> REP3["Stock counts, settings, audit, temperature - schema only"]
+
+    LEGEND["Chú giải: nét liền = hiện trạng; nét đứt = công việc dự kiến, chưa được phê duyệt"]
+    CAT4 -.-> CAT
+    WH1 -.-> WH
+    PUR2 -.-> PUR
+    QC1 -.-> QC
+    INV1 -.-> INV
+    MOV1 -.-> MOV
+    OUT1 -.-> OUT
+    CUS1 -.-> CUS
+
+    %% Dotted edges indicate candidate future API/UI work, not approved scope.

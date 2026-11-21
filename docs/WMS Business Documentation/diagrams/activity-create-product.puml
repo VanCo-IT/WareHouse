@@ -1,0 +1,34 @@
+@startuml
+start
+:Người dùng nhập form Product;
+:UI kiểm tra dữ liệu hiển thị;
+:POST /api/Products;
+if (DTO validation hợp lệ?) then (Không)
+  :Trả 400 ProblemDetails;
+  stop
+else (Có)
+  :Kiểm tra Category tồn tại;
+  if (Category hợp lệ?) then (Không)
+    :Trả 400;
+    stop
+  else (Có)
+    if (Brand được cung cấp?) then (Có)
+      :Kiểm tra Brand tồn tại và active;
+      if (Brand hợp lệ?) then (Không)
+        :Trả 400;
+        stop
+      endif
+    endif
+    :Kiểm tra SKU / Barcode duy nhất;
+    if (Bị trùng?) then (Có)
+      :Trả 409 Conflict;
+      stop
+    else (Không)
+      :Lưu Product bằng EF Core;
+      :Trả 201 Created + ProductResponse;
+      :UI cập nhật danh sách;
+    endif
+  endif
+endif
+stop
+@enduml

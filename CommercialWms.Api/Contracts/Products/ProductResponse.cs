@@ -5,6 +5,7 @@ public sealed record ProductResponse(
     string SKU,
     string ProductName,
     int CategoryId,
+    int? UnitId,
     int? BrandId,
     string? Barcode,
     string? Description,

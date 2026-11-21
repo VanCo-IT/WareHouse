@@ -18,6 +18,7 @@ public sealed class SupplierCreateRequest
     [StringLength(40)]
     public string? TaxCode { get; init; }
 
+    [EmailAddress]
     [StringLength(150)]
     public string? Email { get; init; }
 

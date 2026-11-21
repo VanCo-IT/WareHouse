@@ -1,3 +1,4 @@
+using CommercialWms.Api.Contracts.Common;
 using CommercialWms.Api.Contracts.Brands;
 using CommercialWms.Api.Data;
 using CommercialWms.Api.Entities;
@@ -13,15 +14,30 @@ public sealed class BrandsController(CommercialWmsDbContext dbContext) : Control
 {
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<BrandResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<BrandResponse>>> GetBrands(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<BrandResponse>>> GetBrands(
+        [FromQuery] CatalogListQuery query,
+        CancellationToken cancellationToken)
     {
-        var brands = await dbContext.Brands
-            .AsNoTracking()
+        var brands = dbContext.Brands.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            brands = brands.Where(brand => brand.BrandName.Contains(search));
+        }
+
+        if (query.IsActive.HasValue)
+        {
+            brands = brands.Where(brand => brand.IsActive == query.IsActive.Value);
+        }
+
+        var totalCount = await brands.CountAsync(cancellationToken);
+        var result = await brands
             .OrderBy(brand => brand.BrandId)
+            .ApplyCatalogPaging(query, totalCount, Response.Headers)
             .Select(brand => ToResponse(brand))
             .ToListAsync(cancellationToken);
 
-        return Ok(brands);
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]

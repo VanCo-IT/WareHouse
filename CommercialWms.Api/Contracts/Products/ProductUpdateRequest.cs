@@ -16,6 +16,9 @@ public sealed class ProductUpdateRequest
     public int CategoryId { get; init; }
 
     [Range(1, int.MaxValue)]
+    public int UnitId { get; init; }
+
+    [Range(1, int.MaxValue)]
     public int? BrandId { get; init; }
 
     [StringLength(60)]

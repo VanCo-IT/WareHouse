@@ -1,0 +1,25 @@
+@startuml
+actor "Người dùng" as User
+participant "React ProductsPage" as UI
+participant "catalogApi / apiClient" as Client
+participant "ProductsController" as API
+database "WareHouse" as DB
+
+User -> UI: Nhập Product và xác nhận lưu
+UI -> Client: createProduct(ProductCreateRequest)
+Client -> API: POST /api/Products
+API -> API: DTO validation
+API -> DB: Kiểm tra Category / Brand
+DB --> API: Kết quả tham chiếu
+API -> DB: Kiểm tra SKU / Barcode
+DB --> API: Kết quả duy nhất
+alt Dữ liệu sai hoặc trùng
+  API --> Client: 400 hoặc 409 ProblemDetails
+  Client --> UI: Hiển thị lỗi
+else Hợp lệ
+  API -> DB: INSERT Product (EF Core)
+  DB --> API: ProductId
+  API --> Client: 201 Created + ProductResponse
+  Client --> UI: Thành công và cập nhật giao diện
+end
+@enduml

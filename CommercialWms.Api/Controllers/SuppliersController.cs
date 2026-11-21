@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using CommercialWms.Api.Contracts.Common;
 using CommercialWms.Api.Contracts.Suppliers;
 using CommercialWms.Api.Data;
 using CommercialWms.Api.Entities;
@@ -14,15 +15,34 @@ public sealed class SuppliersController(CommercialWmsDbContext dbContext) : Cont
 {
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<SupplierResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<SupplierResponse>>> GetSuppliers(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<SupplierResponse>>> GetSuppliers(
+        [FromQuery] CatalogListQuery query,
+        CancellationToken cancellationToken)
     {
-        var suppliers = await dbContext.Suppliers
-            .AsNoTracking()
+        var suppliers = dbContext.Suppliers.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            suppliers = suppliers.Where(supplier =>
+                supplier.SupplierCode.Contains(search)
+                || supplier.SupplierName.Contains(search)
+                || (supplier.Email != null && supplier.Email.Contains(search))
+                || (supplier.Phone != null && supplier.Phone.Contains(search)));
+        }
+
+        if (query.IsActive.HasValue)
+        {
+            suppliers = suppliers.Where(supplier => supplier.IsActive == query.IsActive.Value);
+        }
+
+        var totalCount = await suppliers.CountAsync(cancellationToken);
+        var result = await suppliers
             .OrderBy(supplier => supplier.SupplierId)
+            .ApplyCatalogPaging(query, totalCount, Response.Headers)
             .Select(supplier => ToResponse(supplier))
             .ToListAsync(cancellationToken);
 
-        return Ok(suppliers);
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]
@@ -48,6 +68,13 @@ public sealed class SuppliersController(CommercialWmsDbContext dbContext) : Cont
         CancellationToken cancellationToken)
     {
         var code = request.SupplierCode.Trim();
+        if (string.IsNullOrWhiteSpace(request.Email) && string.IsNullOrWhiteSpace(request.Phone))
+        {
+            return BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "Provide at least an email address or a phone number for the supplier."));
+        }
+
         if (!await dbContext.Countries.AnyAsync(country => country.CountryId == request.CountryId, cancellationToken))
         {
             return BadRequest(CreateProblem(StatusCodes.Status400BadRequest, $"Country {request.CountryId} was not found."));
@@ -103,6 +130,13 @@ public sealed class SuppliersController(CommercialWmsDbContext dbContext) : Cont
         if (supplier is null)
         {
             return NotFound();
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Email) && string.IsNullOrWhiteSpace(request.Phone))
+        {
+            return BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "Provide at least an email address or a phone number for the supplier."));
         }
 
         if (!await dbContext.Countries.AnyAsync(country => country.CountryId == request.CountryId, cancellationToken))
@@ -162,6 +196,37 @@ public sealed class SuppliersController(CommercialWmsDbContext dbContext) : Cont
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(ToResponse(supplier));
+    }
+
+    [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteSupplier(int id, CancellationToken cancellationToken)
+    {
+        var supplier = await dbContext.Suppliers
+            .SingleOrDefaultAsync(item => item.SupplierId == id, cancellationToken);
+        if (supplier is null)
+        {
+            return NotFound();
+        }
+
+        if (await IsSupplierReferencedAsync(id, cancellationToken))
+        {
+            return SupplierInUseConflict();
+        }
+
+        dbContext.Suppliers.Remove(supplier);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsForeignKeyViolation(exception))
+        {
+            return SupplierInUseConflict();
+        }
+
+        return NoContent();
     }
 
     [HttpGet("{id:int}/products")]
@@ -399,6 +464,16 @@ public sealed class SuppliersController(CommercialWmsDbContext dbContext) : Cont
                 cancellationToken);
     }
 
+    private async Task<bool> IsSupplierReferencedAsync(int id, CancellationToken cancellationToken)
+    {
+        return await dbContext.FoodSafetyDocuments.AnyAsync(item => item.SupplierId == id, cancellationToken)
+            || await dbContext.PurchaseOrders.AnyAsync(item => item.SupplierId == id, cancellationToken)
+            || await dbContext.PurchasePriceHistories.AnyAsync(item => item.SupplierId == id, cancellationToken)
+            || await dbContext.SupplierContacts.AnyAsync(item => item.SupplierId == id, cancellationToken)
+            || await dbContext.SupplierDocuments.AnyAsync(item => item.SupplierId == id, cancellationToken)
+            || await dbContext.SupplierProducts.AnyAsync(item => item.SupplierId == id, cancellationToken);
+    }
+
     private static SupplierProductResponse ToResponse(SupplierProductResponseProjection projection)
     {
         return new SupplierProductResponse(
@@ -454,6 +529,13 @@ public sealed class SuppliersController(CommercialWmsDbContext dbContext) : Cont
         return Conflict(CreateProblem(
             StatusCodes.Status409Conflict,
             "This supplier, product, and manufacturer combination already exists."));
+    }
+
+    private ConflictObjectResult SupplierInUseConflict()
+    {
+        return Conflict(CreateProblem(
+            StatusCodes.Status409Conflict,
+            "The supplier cannot be deleted because it is referenced by documents, purchasing, contacts, products, or price history."));
     }
 
     private static ProblemDetails CreateProblem(int status, string detail)

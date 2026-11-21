@@ -1,0 +1,39 @@
+erDiagram
+    COUNTRIES ||--o{ BRANDS : classifies
+    COUNTRIES ||--o{ SUPPLIERS : located_in
+    COUNTRIES ||--o{ MANUFACTURERS : located_in
+    PRODUCT_CATEGORIES ||--o{ PRODUCTS : categorizes
+    PRODUCT_CATEGORIES ||--o{ PRODUCT_CATEGORIES : parent_of
+    BRANDS ||--o{ PRODUCTS : labels
+    SUPPLIERS ||--o{ SUPPLIER_CONTACTS : has
+    SUPPLIERS ||--o{ SUPPLIER_PRODUCTS : offers
+    PRODUCTS ||--o{ SUPPLIER_PRODUCTS : linked
+    MANUFACTURERS ||--o{ SUPPLIER_PRODUCTS : makes
+    WAREHOUSES ||--o{ WAREHOUSE_ZONES : contains
+    WAREHOUSE_ZONES ||--o{ WAREHOUSE_AISLES : contains
+    WAREHOUSE_AISLES ||--o{ WAREHOUSE_RACKS : contains
+    WAREHOUSE_RACKS ||--o{ WAREHOUSE_SHELVES : contains
+    WAREHOUSE_SHELVES ||--o{ WAREHOUSE_BINS : contains
+    PRODUCTS ||--o{ INVENTORY_LOTS : tracked_as
+    MANUFACTURERS ||--o{ INVENTORY_LOTS : produces
+    INVENTORY_LOTS ||--o{ INVENTORY_BALANCES : balanced_by
+    WAREHOUSE_BINS ||--o{ INVENTORY_BALANCES : stores
+    CUSTOMERS ||--o{ CUSTOMER_ADDRESSES : has
+    CUSTOMERS ||--o{ SALES_ORDERS : places
+    SALES_ORDERS ||--o{ SALES_ORDER_DETAILS : contains
+    PRODUCTS ||--o{ SALES_ORDER_DETAILS : ordered
+    SALES_ORDERS ||--o{ DELIVERIES : fulfilled_by
+    DELIVERIES ||--o{ DELIVERY_DETAILS : contains
+    INVENTORY_LOTS ||--o{ DELIVERY_DETAILS : ships
+    CUSTOMERS ||--o{ PAYMENTS : pays
+    PAYMENTS ||--o{ PAYMENT_DETAILS : allocates
+    SALES_ORDERS ||--o{ PAYMENT_DETAILS : settled_by
+    PURCHASE_ORDERS ||--o{ PURCHASE_ORDER_DETAILS : contains
+    PURCHASE_ORDERS ||--o{ GOODS_RECEIPTS : received_as
+    GOODS_RECEIPTS ||--o{ GOODS_RECEIPT_DETAILS : contains
+    GOODS_RECEIPT_DETAILS ||--o{ QUALITY_INSPECTION_DETAILS : inspected
+    STOCK_TRANSFERS ||--o{ STOCK_TRANSFER_DETAILS : contains
+    STOCK_ADJUSTMENTS ||--o{ STOCK_ADJUSTMENT_DETAILS : contains
+    STOCK_COUNTS ||--o{ STOCK_COUNT_DETAILS : counts
+
+%% Overview only: database snapshot has 101 enabled foreign keys. See API/data map and EF migration for complete details.
